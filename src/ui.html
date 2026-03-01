@@ -652,9 +652,12 @@
         <!-- Action Buttons -->
         <div class="actions-row" id="actionsSection" style="display:none">
             <button class="btn btn-secondary" id="btnCancel">Cancel</button>
-            <button class="btn btn-secondary" id="btnRestore" style="display:none">Restore Original</button>
             <button class="btn btn-secondary" id="btnClear">Clear All</button>
-            <button class="btn btn-primary" id="btnApply" disabled>Erase</button>
+            <button class="btn btn-primary" id="btnApply" disabled> Erase</button>
+        </div>
+
+        <div class="actions-row" id="restoreSection" style="display:none">
+            <button class="btn btn-danger" id="btnRestore2">🔄 Restore Original Image</button>
         </div>
 
         <div class="status-bar" id="statusBar">Select an image to begin</div>
@@ -701,7 +704,7 @@
             const btnApply = document.getElementById("btnApply");
             const btnCancel = document.getElementById("btnCancel");
             const btnClear = document.getElementById("btnClear");
-            const btnRestore = document.getElementById("btnRestore");
+            const btnRestore2 = document.getElementById("btnRestore2");
             const btnZoomIn = document.getElementById("btnZoomIn");
             const btnZoomOut = document.getElementById("btnZoomOut");
             const btnZoomReset = document.getElementById("btnZoomReset");
@@ -1306,7 +1309,7 @@
                 setStatus("Applying mask…");
             });
 
-            btnRestore.addEventListener("click", () => {
+            btnRestore2.addEventListener("click", () => {
                 parent.postMessage({ pluginMessage: { type: "restore-original" } }, "*");
             });
 
@@ -1319,7 +1322,6 @@
                     case "no-selection":
                     case "multiple-selection":
                     case "invalid-selection":
-                        if (isEditing && loadedImage) return; // protect editing session
                         showEditorUI(false);
                         restoreSection.style.display = "none";
                         emptyState.style.display = "flex";
@@ -1340,6 +1342,16 @@
                         currentNodeId = null; loadedImage = null; isEditing = false;
                         break;
 
+                    case "already-processed":
+                        showEditorUI(false);
+                        restoreSection.style.display = "flex";
+                        emptyState.style.display = "flex";
+                        emptyState.querySelector(".empty-state-title").textContent = "Already Processed";
+                        emptyState.querySelector(".empty-state-desc").textContent = "Background already removed. Click Restore to undo.";
+                        loadingOverlay.style.display = "none";
+                        hideCanvases();
+                        break;
+
                     case "loading":
                         loadingOverlay.style.display = "flex";
                         emptyState.style.display = "none";
@@ -1349,11 +1361,8 @@
                     case "image-loaded":
                         currentNodeId = msg.nodeId;
                         imgWidth = msg.width; imgHeight = msg.height;
-                        btnRestore.style.display = msg.hasRestorationData ? "block" : "none";
                         loadImageData(msg.data);
                         break;
-
-
 
                     case "mask-applied":
                         showToast("✅ Background removed!", "success");

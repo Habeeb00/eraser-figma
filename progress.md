@@ -41,6 +41,7 @@
 - [x] **Fixed:** Mask application now uses `figma.createImage()` + fill replacement instead of vector mask groups
 - [x] **Fixed:** Original image stored in plugin data (`originalImageHash`) for non-destructive restoration
 - [x] **Fixed:** PNGs with existing transparency turned black — now uses `Math.min(originalAlpha, maskAlpha)` to preserve original transparency while also applying brush erasure
+- [x] **Fixed:** Selection sync was sluggish — removed guards that blocked updating the UI while an editing session was active. Selecting a new node now correctly switches the editor immediately.
 
 ### New Features (2026-03-01)
 - [x] **Zoom** — Mouse wheel to zoom in/out toward cursor, +/- keys, zoom buttons in canvas area

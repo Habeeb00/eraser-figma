@@ -44,6 +44,30 @@ async function handleSelection() {
 
     const node = sel[0];
 
+    // Don't reload if we are already editing this exact node
+    if (isEditing && activeNodeId === node.id) {
+        return;
+    }
+
+    // New selection detected, stop editing previous session
+    if (activeNodeId && activeNodeId !== node.id) {
+        isEditing = false;
+        activeNodeId = null;
+    }
+
+    // Check if this node was already processed (has stored original)
+    if (hasPluginData(node)) {
+        const originalHash = node.getPluginData("originalImageHash");
+        if (originalHash) {
+            figma.ui.postMessage({
+                type: "already-processed",
+                id: node.id,
+                name: node.name,
+            });
+            return;
+        }
+    }
+
     if (!isProcessableNode(node)) {
         figma.ui.postMessage({ type: "invalid-selection" });
         return;
@@ -57,15 +81,10 @@ async function handleSelection() {
     try {
         figma.ui.postMessage({ type: "loading" });
 
-        const imageBytes = await (node as any).exportAsync({ format: "PNG" });
+        const imageBytes = await node.exportAsync({ format: "PNG" });
         const base64 = figma.base64Encode(imageBytes);
-        activeNodeId = node.id;
 
-        const hasRestorationData = !!(
-            (node as any).getPluginData("originalFills") ||
-            (node as any).getPluginData("originalImageHash") ||
-            (node as any).getPluginData("originalNodeId")
-        );
+        activeNodeId = node.id;
 
         figma.ui.postMessage({
             type: "image-loaded",
@@ -73,7 +92,6 @@ async function handleSelection() {
             nodeId: node.id,
             width: Math.round(node.width),
             height: Math.round(node.height),
-            hasRestorationData
         });
     } catch (err: any) {
         console.error("Export error:", err);
@@ -97,22 +115,16 @@ async function applyMask(base64ImageData: string, nodeId: string) {
     try {
         const targetNode = node as SceneNode & MinimalFillsMixin;
 
-        // 1. Store original state for restoration (only if it doesn't exist)
+        // 1. Store original state for restoration
         const sceneNode = node as SceneNode;
         if (hasFills(sceneNode)) {
             const currentFills = (sceneNode as any).fills;
-            const existingFills = (sceneNode as any).getPluginData("originalFills");
-            const existingHash = (sceneNode as any).getPluginData("originalImageHash");
-
-            if (!existingFills && !existingHash && currentFills !== figma.mixed) {
+            if (currentFills !== figma.mixed) {
                 (sceneNode as any).setPluginData("originalFills", JSON.stringify(currentFills));
             }
         } else {
-            const existingHidden = (sceneNode as any).getPluginData("wasHidden");
-            const existingReplacement = (sceneNode as any).getPluginData("replacementId");
-            if (!existingHidden && !existingReplacement) {
-                (sceneNode as any).setPluginData("wasHidden", "true");
-            }
+            // It's a group or something without fills, we'll keep it hidden
+            (sceneNode as any).setPluginData("wasHidden", "true");
         }
 
         // 2. Decode the composited PNG from UI
@@ -128,9 +140,7 @@ async function applyMask(base64ImageData: string, nodeId: string) {
             Array.isArray((sceneNode as any).fills) &&
             (sceneNode as any).fills.some((f: any) => f.type === "IMAGE");
 
-        const isReplacementNode = (sceneNode as any).getPluginData("originalNodeId");
-
-        if (isSimpleImageRect || isReplacementNode) {
+        if (isSimpleImageRect) {
             actualTarget = sceneNode as RectangleNode;
         } else {
             // Create a replacement rectangle for vectors/groups/frames
@@ -149,14 +159,8 @@ async function applyMask(base64ImageData: string, nodeId: string) {
 
             // Hide original
             (sceneNode as any).visible = false;
-            // Only set replacementId if it's not already set (for continuous erasure)
-            if (!(sceneNode as any).getPluginData("replacementId")) {
-                (sceneNode as any).setPluginData("replacementId", rect.id);
-            }
-            // Only set originalNodeId if it's not already set
-            if (!(rect as any).getPluginData("originalNodeId")) {
-                (rect as any).setPluginData("originalNodeId", sceneNode.id);
-            }
+            (sceneNode as any).setPluginData("replacementId", rect.id);
+            (rect as any).setPluginData("originalNodeId", sceneNode.id);
             actualTarget = rect;
         }
 
@@ -284,9 +288,7 @@ figma.ui.onmessage = async (msg: any) => {
 // Run on startup
 handleSelection();
 
-// Listen for selection changes — blocked while editing
+// Listen for selection changes — always update unless it's the same node
 figma.on("selectionchange", () => {
-    if (!isEditing) {
-        handleSelection();
-    }
+    handleSelection();
 });
