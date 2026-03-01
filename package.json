@@ -1,7 +1,7 @@
 {
-    "name": "brush-background-remover",
-    "version": "1.0.0",
-    "description": "A brush-based background remover plugin for Figma using native vector masking",
+    "name": "eraser",
+    "version": "1.1.0",
+    "description": "Brush-based background removal and element erasure tool for Figma",
     "scripts": {
         "build": "tsc",
         "watch": "tsc --watch"

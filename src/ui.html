@@ -9,11 +9,13 @@
             /* Fallbacks in case Figma variables aren't injected */
             --bg: var(--figma-color-bg, #ffffff);
             --bg-surface: var(--figma-color-bg-secondary, #f5f5f5);
-            --bg-elevated: var(--figma-color-bg-inverse, #222222);
+            --bg-elevated: var(--figma-color-bg-tertiary, #e5e5e5);
+            --bg-active: var(--figma-color-bg-selected, #e8f4ff);
             --border: var(--figma-color-border, #e5e5e5);
             --border-hover: var(--figma-color-border-selected, #18a0fb);
             --text: var(--figma-color-text, #333333);
             --text-dim: var(--figma-color-text-tertiary, #b3b3b3);
+            --text-active: var(--figma-color-text-selected, #18a0fb);
             --text-inverse: var(--figma-color-text-onbrand, #ffffff);
             --accent: var(--figma-color-bg-brand, #18a0fb);
             --accent-hover: var(--figma-color-bg-brand-hover, #0b8ce1);
@@ -74,7 +76,7 @@
         .header-badge {
             font-size: 10px;
             padding: 2px 8px;
-            background: var(--bg-elevated);
+            background: var(--bg-surface);
             border: 1px solid var(--border);
             border-radius: 20px;
             color: var(--text-dim);
@@ -82,14 +84,19 @@
         }
 
         /* ─── Canvas Area ───────────────────────────────────── */
-        .canvas-wrapper {
+        .canvas-area {
             flex: 1;
             position: relative;
+            min-height: 0;
+        }
+
+        .canvas-wrapper {
+            position: absolute;
+            inset: 0;
             background: var(--bg-surface);
             border: 1px solid var(--border);
             border-radius: var(--radius);
             overflow: hidden;
-            min-height: 0;
             touch-action: none;
             /* prevent iframe scroll interference */
         }
@@ -251,7 +258,7 @@
         }
 
         .tool-btn.active {
-            background: var(--bg-elevated);
+            background: var(--accent);
             color: var(--text-inverse);
             border-color: transparent;
         }
@@ -514,42 +521,47 @@
             <span class="header-title">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
                     stroke-linecap="round" stroke-linejoin="round">
-                    <path d="m12 18-7 3 7-18 7 18-7-3z" />
+                    <path d="M20 20H7L3 16c-.8-.8-.8-2 0-2.8L14.6 1.6c.8-.8 2-.8 2.8 0L21.4 5.6c.8.8.8 2 0 2.8L10 20" />
                 </svg>
-                Brush Remover
+                Eraser
             </span>
             <span class="header-badge">v1.1</span>
         </div>
 
         <!-- Canvas Area -->
-        <div class="canvas-wrapper" id="canvasWrapper">
-            <div class="empty-state" id="emptyState">
-                <div class="empty-state-icon">
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
-                        <circle cx="9" cy="9" r="2" />
-                        <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
-                    </svg>
+        <div class="canvas-area">
+            <div class="canvas-wrapper" id="canvasWrapper">
+                <!-- Empty State -->
+                <div class="empty-state" id="emptyState">
+                    <div class="empty-state-icon">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+                            <circle cx="9" cy="9" r="2" />
+                            <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+                        </svg>
+                    </div>
+                    <div class="empty-state-title">Select an Image</div>
+                    <div class="empty-state-desc">Select a node with an image fill on the Figma canvas to start removing
+                        its
+                        background.</div>
                 </div>
-                <div class="empty-state-title">Select an Image</div>
-                <div class="empty-state-desc">Select a node with an image fill on the Figma canvas to start removing its
-                    background.</div>
-            </div>
-            <div class="loading-overlay" id="loadingOverlay" style="display:none">
-                <div class="spinner"></div>
-                <div class="loading-text">Loading image…</div>
+
+                <div class="loading-overlay" id="loadingOverlay" style="display:none">
+                    <div class="spinner"></div>
+                    <div class="loading-text">Loading image…</div>
+                </div>
+
+                <!-- Canvas container (zoom/pan transforms applied here) -->
+                <div class="canvas-inner" id="canvasInner" style="display:none">
+                    <canvas id="checkerboard"></canvas>
+                    <canvas id="image-canvas"></canvas>
+                    <canvas id="mask-canvas"></canvas>
+                    <canvas id="brush-canvas"></canvas>
+                </div>
             </div>
 
-            <!-- Canvas container (zoom/pan transforms applied here) -->
-            <div class="canvas-inner" id="canvasInner" style="display:none">
-                <canvas id="checkerboard"></canvas>
-                <canvas id="image-canvas"></canvas>
-                <canvas id="mask-canvas"></canvas>
-                <canvas id="brush-canvas"></canvas>
-            </div>
-
-            <!-- Zoom UI -->
+            <!-- Zoom UI (Relative to .canvas-area) -->
             <div class="zoom-badge" id="zoomBadge" style="display:none">100%</div>
             <div class="zoom-controls" id="zoomControls" style="display:none">
                 <button class="zoom-btn" id="btnZoomOut" title="Zoom Out (-)">−</button>
@@ -641,7 +653,7 @@
         <div class="actions-row" id="actionsSection" style="display:none">
             <button class="btn btn-secondary" id="btnCancel">Cancel</button>
             <button class="btn btn-secondary" id="btnClear">Clear All</button>
-            <button class="btn btn-primary" id="btnApply" disabled> Apply Mask</button>
+            <button class="btn btn-primary" id="btnApply" disabled> Erase</button>
         </div>
 
         <div class="actions-row" id="restoreSection" style="display:none">
@@ -1173,15 +1185,23 @@
             btnUndo.addEventListener("click", undo);
             btnRedo.addEventListener("click", redo);
 
-            btnZoomIn.addEventListener("click", () => {
+            zoomControls.addEventListener("pointerdown", (e) => e.stopPropagation());
+            zoomControls.addEventListener("mousedown", (e) => e.stopPropagation());
+
+            btnZoomIn.addEventListener("click", (e) => {
+                e.stopPropagation();
                 const wr = canvasWrapper.getBoundingClientRect();
                 zoomTo(zoom * 1.25, wr.width / 2, wr.height / 2);
             });
-            btnZoomOut.addEventListener("click", () => {
+            btnZoomOut.addEventListener("click", (e) => {
+                e.stopPropagation();
                 const wr = canvasWrapper.getBoundingClientRect();
                 zoomTo(zoom / 1.25, wr.width / 2, wr.height / 2);
             });
-            btnZoomReset.addEventListener("click", fitToView);
+            btnZoomReset.addEventListener("click", (e) => {
+                e.stopPropagation();
+                fitToView();
+            });
 
             // ─── Keyboard Shortcuts ───────────────────────────
             document.addEventListener("keydown", (e) => {
@@ -1306,8 +1326,16 @@
                         showEditorUI(false);
                         restoreSection.style.display = "none";
                         emptyState.style.display = "flex";
-                        const titles = { "no-selection": "Select an Image", "multiple-selection": "Multiple Selection", "invalid-selection": "Not an Image" };
-                        const descs = { "no-selection": "Select a node with an image fill on the Figma canvas.", "multiple-selection": "Please select a single image to edit.", "invalid-selection": "Select a node with an image fill (PNG or JPG)." };
+                        const titles = {
+                            "no-selection": "Select something",
+                            "multiple-selection": "Multiple Selection",
+                            "invalid-selection": "Cannot Edit"
+                        };
+                        const descs = {
+                            "no-selection": "Select an image, vector, or group to start erasing.",
+                            "multiple-selection": "Please select a single element to edit.",
+                            "invalid-selection": "This element cannot be erased (try a basic layer)."
+                        };
                         emptyState.querySelector(".empty-state-title").textContent = titles[msg.type];
                         emptyState.querySelector(".empty-state-desc").textContent = descs[msg.type];
                         loadingOverlay.style.display = "none";

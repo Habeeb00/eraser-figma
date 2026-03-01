@@ -11,11 +11,12 @@ let activeNodeId: string | null = null;
 
 // ─── Helpers ───────────────────────────────────────────────
 
-function hasImageFill(node: SceneNode): boolean {
-    if (!("fills" in node)) return false;
-    const fills = (node as any).fills;
-    if (fills === figma.mixed || !Array.isArray(fills)) return false;
-    return fills.some((f: Paint) => f.type === "IMAGE");
+function isProcessableNode(node: SceneNode): boolean {
+    return "exportAsync" in node;
+}
+
+function hasFills(node: SceneNode): node is (SceneNode & MinimalFillsMixin) {
+    return "fills" in node;
 }
 
 function canExport(node: SceneNode): node is SceneNode & ExportMixin {
@@ -56,7 +57,7 @@ async function handleSelection() {
         }
     }
 
-    if (!hasImageFill(node)) {
+    if (!isProcessableNode(node)) {
         figma.ui.postMessage({ type: "invalid-selection" });
         return;
     }
@@ -103,14 +104,16 @@ async function applyMask(base64ImageData: string, nodeId: string) {
     try {
         const targetNode = node as SceneNode & MinimalFillsMixin;
 
-        // 1. Store original image hash for later restoration
-        if (hasPluginData(node)) {
-            const currentFills = targetNode.fills as readonly Paint[];
-            const imageFill = currentFills.find((f: Paint) => f.type === "IMAGE") as ImagePaint | undefined;
-            if (imageFill && imageFill.imageHash) {
-                (node as SceneNode & PluginDataMixin).setPluginData("originalImageHash", imageFill.imageHash);
-                (node as SceneNode & PluginDataMixin).setPluginData("originalScaleMode", imageFill.scaleMode || "FILL");
+        // 1. Store original state for restoration
+        const sceneNode = node as SceneNode;
+        if (hasFills(sceneNode)) {
+            const currentFills = (sceneNode as any).fills;
+            if (currentFills !== figma.mixed) {
+                (sceneNode as any).setPluginData("originalFills", JSON.stringify(currentFills));
             }
+        } else {
+            // It's a group or something without fills, we'll keep it hidden
+            (sceneNode as any).setPluginData("wasHidden", "true");
         }
 
         // 2. Decode the composited PNG from UI
@@ -119,13 +122,42 @@ async function applyMask(base64ImageData: string, nodeId: string) {
         // 3. Create a new Figma image from the bytes
         const newImage = figma.createImage(imageBytes);
 
-        // 4. Replace the fill with the new transparent image
-        targetNode.fills = [{
+        let actualTarget: SceneNode & MinimalFillsMixin;
+
+        const isSimpleImageRect = sceneNode.type === "RECTANGLE" &&
+            hasFills(sceneNode) &&
+            Array.isArray((sceneNode as any).fills) &&
+            (sceneNode as any).fills.some((f: any) => f.type === "IMAGE");
+
+        if (isSimpleImageRect) {
+            actualTarget = sceneNode as RectangleNode;
+        } else {
+            // Create a replacement rectangle for vectors/groups/frames
+            const rect = figma.createRectangle();
+            rect.name = (sceneNode as any).name + " (Eraser)";
+            rect.resize((sceneNode as any).width, (sceneNode as any).height);
+            rect.x = (sceneNode as any).x;
+            rect.y = (sceneNode as any).y;
+            rect.rotation = (sceneNode as any).rotation;
+
+            // Add to same parent
+            if ((sceneNode as any).parent) {
+                const index = (sceneNode as any).parent.children.indexOf(sceneNode);
+                (sceneNode as any).parent.insertChild(index + 1, rect);
+            }
+
+            // Hide original
+            (sceneNode as any).visible = false;
+            (sceneNode as any).setPluginData("replacementId", rect.id);
+            (rect as any).setPluginData("originalNodeId", sceneNode.id);
+            actualTarget = rect;
+        }
+
+        // 4. Replace the fill
+        actualTarget.fills = [{
             type: "IMAGE",
             imageHash: newImage.hash,
             scaleMode: "FILL",
-            visible: true,
-            opacity: 1,
         }];
 
         isEditing = false;
@@ -152,34 +184,63 @@ function restoreOriginal() {
 
     const node = sel[0];
 
-    if (!hasPluginData(node) || !("fills" in node)) {
-        figma.notify("⚠️ This node doesn't support restoration.");
+    // Case 1: Was a hidden original (Group/Frame)
+    const replacementId = (node as any).getPluginData("replacementId");
+    if (replacementId) {
+        const replacement = figma.getNodeById(replacementId);
+        if (replacement) replacement.remove();
+        (node as SceneNode).visible = true;
+        (node as any).setPluginData("replacementId", "");
+        figma.notify("✅ Original restored!");
+        figma.ui.postMessage({ type: "restored" });
         return;
     }
 
+    // Case 2: Was a replacement node
+    const originalNodeId = (node as any).getPluginData("originalNodeId");
+    if (originalNodeId) {
+        const original = figma.getNodeById(originalNodeId) as SceneNode;
+        if (original) {
+            original.visible = true;
+            (original as any).setPluginData("replacementId", "");
+            node.remove();
+            figma.currentPage.selection = [original];
+            figma.notify("✅ Original restored!");
+            figma.ui.postMessage({ type: "restored" });
+        }
+        return;
+    }
+
+    // Case 3: In-place fill replacement (Vector/Image)
+    const originalFillsJson = node.getPluginData("originalFills");
+    if (originalFillsJson && hasFills(node)) {
+        try {
+            node.fills = JSON.parse(originalFillsJson);
+            node.setPluginData("originalFills", "");
+            figma.notify("✅ Original restored!");
+            figma.ui.postMessage({ type: "restored" });
+        } catch (e) {
+            figma.notify("❌ Failed to restore fills.");
+        }
+        return;
+    }
+
+    // Legacy support (hash based)
     const originalHash = node.getPluginData("originalImageHash");
-    if (!originalHash) {
-        figma.notify("⚠️ No original image data found on this node.");
+    if (originalHash && hasFills(node)) {
+        const scaleMode = node.getPluginData("originalScaleMode") || "FILL";
+        node.fills = [{
+            type: "IMAGE",
+            imageHash: originalHash,
+            scaleMode: scaleMode as ImagePaint["scaleMode"],
+        }];
+        node.setPluginData("originalImageHash", "");
+        figma.notify("✅ Original restored!");
+        figma.ui.postMessage({ type: "restored" });
         return;
     }
 
-    const scaleMode = node.getPluginData("originalScaleMode") || "FILL";
-
-    (node as SceneNode & MinimalFillsMixin).fills = [{
-        type: "IMAGE",
-        imageHash: originalHash,
-        scaleMode: scaleMode as ImagePaint["scaleMode"],
-        visible: true,
-        opacity: 1,
-    }];
-
-    // Clear the stored data
-    node.setPluginData("originalImageHash", "");
-    node.setPluginData("originalScaleMode", "");
-
-    figma.currentPage.selection = [node];
-    figma.notify("✅ Original image restored!");
-    figma.ui.postMessage({ type: "restored" });
+    figma.notify("⚠️ No restoration data found.");
 }
 
 // ─── Message handler ───────────────────────────────────────

@@ -54,6 +54,11 @@
   - Works in both erase and restore modes
 - [x] **Updated keyboard shortcuts:** B=Brush, L=Lasso, E=Erase, R=Restore, 0=Fit, +/-=Zoom
 - [x] **Figma Native UI Update** — Completely refactored UI styling to use Figma's native design tokens (`--figma-color-bg`, `--figma-color-text`, etc.) for seamless integration with Figma's light/dark modes. Added professional SVG icons, improved slider aesthetics, and refined component elevations.
+- [x] **UI Contrast Fix** — Fixed visibility issues in dark mode where selected buttons and version badges had white-on-white text by correctly mapping Figma's theme tokens.
+- [x] **Eraser Branding** — Renamed plugin to **Eraser**, added new eraser logo, and updated all UI labels.
+- [x] **Vector & Group Support** — Expanded support beyond images. You can now erase parts of Vector nodes, Groups, Frames, and Text.
+  - Non-image nodes are automatically rasterized for the editor.
+  - Restoration system expanded to handle complex original states (hiding/unhiding groups).
 
 ## 🔲 Not Yet Implemented (V1+ Features from plan.md)
 

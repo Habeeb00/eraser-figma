@@ -1,6 +1,6 @@
 {
-    "name": "Brush Background Remover",
-    "id": "brush-background-remover",
+    "name": "Eraser",
+    "id": "eraser",
     "api": "1.0.0",
     "main": "dist/code.js",
     "ui": "src/ui.html",
