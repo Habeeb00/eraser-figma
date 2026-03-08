@@ -44,7 +44,7 @@ async function handleSelection() {
 
     const node = sel[0];
 
-    // Don't reload if we are already editing this exact node
+    // Don't reload if the user is actively painting on the same node
     if (isEditing && activeNodeId === node.id) {
         return;
     }
@@ -90,8 +90,8 @@ async function handleSelection() {
             type: "image-loaded",
             data: base64,
             nodeId: node.id,
-            width: Math.round(node.width),
-            height: Math.round(node.height),
+            // width/height are derived by the UI from the actual image pixels,
+            // NOT from node.width/node.height (which are layout units, not export pixels)
         });
     } catch (err: any) {
         console.error("Export error:", err);
@@ -107,75 +107,75 @@ async function applyMask(base64ImageData: string, nodeId: string) {
     if (!node && activeNodeId) {
         node = figma.getNodeById(activeNodeId) as SceneNode | null;
     }
-    if (!node || !("fills" in node)) {
+    if (!node) {
         figma.ui.postMessage({ type: "error", message: "Target node not found: " + nodeId });
         return;
     }
 
     try {
-        const targetNode = node as SceneNode & MinimalFillsMixin;
-
-        // 1. Store original state for restoration
         const sceneNode = node as SceneNode;
-        if (hasFills(sceneNode)) {
-            const currentFills = (sceneNode as any).fills;
-            if (currentFills !== figma.mixed) {
-                (sceneNode as any).setPluginData("originalFills", JSON.stringify(currentFills));
-            }
-        } else {
-            // It's a group or something without fills, we'll keep it hidden
-            (sceneNode as any).setPluginData("wasHidden", "true");
-        }
 
-        // 2. Decode the composited PNG from UI
+        // Decode the composited PNG from the UI
         const imageBytes = figma.base64Decode(base64ImageData);
-
-        // 3. Create a new Figma image from the bytes
         const newImage = figma.createImage(imageBytes);
 
-        let actualTarget: SceneNode & MinimalFillsMixin;
-
-        const isSimpleImageRect = sceneNode.type === "RECTANGLE" &&
-            hasFills(sceneNode) &&
+        const isImageRect = sceneNode.type === "RECTANGLE" &&
+            "fills" in sceneNode &&
             Array.isArray((sceneNode as any).fills) &&
             (sceneNode as any).fills.some((f: any) => f.type === "IMAGE");
 
-        if (isSimpleImageRect) {
-            actualTarget = sceneNode as RectangleNode;
-        } else {
-            // Create a replacement rectangle for vectors/groups/frames
-            const rect = figma.createRectangle();
-            rect.name = (sceneNode as any).name + " (Eraser)";
-            rect.resize((sceneNode as any).width, (sceneNode as any).height);
-            rect.x = (sceneNode as any).x;
-            rect.y = (sceneNode as any).y;
-            rect.rotation = (sceneNode as any).rotation;
+        if (isImageRect) {
+            // ─── In-place update for simple image rectangles ───
+            // Store original ONCE
+            if (!(sceneNode as any).getPluginData("originalFills")) {
+                (sceneNode as any).setPluginData("originalFills", JSON.stringify((sceneNode as any).fills));
+            }
+            (sceneNode as any).fills = [{ type: "IMAGE", imageHash: newImage.hash, scaleMode: "FILL" }];
 
-            // Add to same parent
-            if ((sceneNode as any).parent) {
-                const index = (sceneNode as any).parent.children.indexOf(sceneNode);
-                (sceneNode as any).parent.insertChild(index + 1, rect);
+        } else {
+            // ─── For vectors / groups / frames ──────────────────
+            // Reuse an existing eraser rect if we've applied before, otherwise create one
+            const existingRectId = (sceneNode as any).getPluginData("eraserRectId");
+            let rect: RectangleNode | null = existingRectId
+                ? figma.getNodeById(existingRectId) as RectangleNode | null
+                : null;
+
+            if (!rect) {
+                // First time: store original state, create rect
+                (sceneNode as any).setPluginData("wasHidden", "true");
+                rect = figma.createRectangle();
+                rect.name = (sceneNode as any).name + " (Erased)";
+                rect.resize((sceneNode as any).width, (sceneNode as any).height);
+                rect.x = (sceneNode as any).x;
+                rect.y = (sceneNode as any).y;
+                if ((sceneNode as any).parent) {
+                    const idx = (sceneNode as any).parent.children.indexOf(sceneNode);
+                    (sceneNode as any).parent.insertChild(idx + 1, rect);
+                }
+                (sceneNode as any).setPluginData("eraserRectId", rect.id);
+                (rect as any).setPluginData("originalNodeId", sceneNode.id);
+                // Hide the original node
+                (sceneNode as any).visible = false;
             }
 
-            // Hide original
-            (sceneNode as any).visible = false;
-            (sceneNode as any).setPluginData("replacementId", rect.id);
-            (rect as any).setPluginData("originalNodeId", sceneNode.id);
-            actualTarget = rect;
-        }
+            // Update (or set) the fill on the rect
+            (rect as any).fills = [{ type: "IMAGE", imageHash: newImage.hash, scaleMode: "FILL" }];
 
-        // 4. Replace the fill
-        actualTarget.fills = [{
-            type: "IMAGE",
-            imageHash: newImage.hash,
-            scaleMode: "FILL",
-        }];
+            // Select the rect so subsequent handleSelection exports the correct node
+            figma.currentPage.selection = [rect];
+        }
 
         isEditing = false;
         activeNodeId = null;
 
-        figma.ui.postMessage({ type: "mask-applied" });
-        figma.notify("✅ Background removed!");
+        // Echo the composited image back to the UI so it can continue editing
+        // without needing a Figma re-export roundtrip (which can be unreliable)
+        figma.ui.postMessage({
+            type: "mask-applied",
+            continuationImage: base64ImageData,
+            nodeId: sceneNode.type === "RECTANGLE" ? sceneNode.id : figma.currentPage.selection[0]?.id ?? sceneNode.id,
+        });
+        figma.notify("✅ Erased!");
 
     } catch (err: any) {
         console.error("Apply mask error:", err);
@@ -195,25 +195,29 @@ function restoreOriginal() {
 
     const node = sel[0];
 
-    // Case 1: Was a hidden original (Group/Frame)
-    const replacementId = (node as any).getPluginData("replacementId");
-    if (replacementId) {
-        const replacement = figma.getNodeById(replacementId);
-        if (replacement) replacement.remove();
+    // Case 1: Was a hidden original (Group/Frame/Vector) with an eraserRectId or replacementId
+    const eraserRectId = (node as any).getPluginData("eraserRectId") || (node as any).getPluginData("replacementId");
+    if (eraserRectId) {
+        const rect = figma.getNodeById(eraserRectId);
+        if (rect) rect.remove();
         (node as SceneNode).visible = true;
+        (node as any).setPluginData("eraserRectId", "");
         (node as any).setPluginData("replacementId", "");
+        (node as any).setPluginData("wasHidden", "");
         figma.notify("✅ Original restored!");
         figma.ui.postMessage({ type: "restored" });
         return;
     }
 
-    // Case 2: Was a replacement node
+    // Case 2: Was a replacement/eraser rect — find original and restore it
     const originalNodeId = (node as any).getPluginData("originalNodeId");
     if (originalNodeId) {
         const original = figma.getNodeById(originalNodeId) as SceneNode;
         if (original) {
-            original.visible = true;
+            (original as any).visible = true;
+            (original as any).setPluginData("eraserRectId", "");
             (original as any).setPluginData("replacementId", "");
+            (original as any).setPluginData("wasHidden", "");
             node.remove();
             figma.currentPage.selection = [original];
             figma.notify("✅ Original restored!");

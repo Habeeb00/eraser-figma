@@ -1297,8 +1297,17 @@
                 }
 
                 tempCtx.putImageData(fullImgData, 0, 0);
+
+                // Debug: sample some pixels
+                const sample = tempCtx.getImageData(Math.floor(imgWidth / 2), Math.floor(imgHeight / 2), 1, 1).data;
+                console.log("[Eraser] compose: imgW=", imgWidth, "imgH=", imgHeight, "dispW=", displayWidth, "dispH=", displayHeight);
+                console.log("[Eraser] center pixel RGBA:", sample[0], sample[1], sample[2], sample[3]);
+                const maskSample = maskImageData.data[Math.floor(displayHeight / 2) * displayWidth * 4 + Math.floor(displayWidth / 2) * 4];
+                console.log("[Eraser] center mask R:", maskSample);
+
                 const dataUrl = tempCanvas.toDataURL("image/png");
                 const base64 = dataUrl.split(",")[1];
+                console.log("[Eraser] base64 length:", base64.length);
 
                 parent.postMessage({
                     pluginMessage: { type: "apply-mask", imageData: base64, nodeId: currentNodeId },
@@ -1360,17 +1369,27 @@
 
                     case "image-loaded":
                         currentNodeId = msg.nodeId;
-                        imgWidth = msg.width; imgHeight = msg.height;
                         loadImageData(msg.data);
                         break;
 
                     case "mask-applied":
-                        showToast("✅ Background removed!", "success");
-                        btnApply.textContent = "✨ Apply Mask";
-                        btnApply.disabled = false;
-                        setStatus("Done! Select the image → Restore to undo.");
-                        isEditing = false; loadedImage = null; currentNodeId = null;
-                        parent.postMessage({ pluginMessage: { type: "editing-stopped" } }, "*");
+                        showToast("✅ Erased!", "success");
+                        setStatus("Applied! Paint more strokes or select another layer.");
+                        btnApply.textContent = "Erase";
+                        btnApply.disabled = true; // disabled until new strokes are painted
+                        if (msg.continuationImage) {
+                            // Reload the editor with the composited result immediately
+                            // (no Figma re-export — the image we composited IS what went to Figma)
+                            if (msg.nodeId) currentNodeId = msg.nodeId;
+                            loadImageData(msg.continuationImage);
+                        } else {
+                            // Fallback: clear state
+                            btnApply.textContent = "Erase";
+                            btnApply.disabled = true;
+                            hasStrokes = false;
+                            isEditing = false; loadedImage = null; currentNodeId = null;
+                            parent.postMessage({ pluginMessage: { type: "editing-stopped" } }, "*");
+                        }
                         break;
 
                     case "restored":
@@ -1402,6 +1421,9 @@
                 const img = new Image();
                 img.onload = () => {
                     loadedImage = img;
+                    // Set actual pixel dimensions from the loaded image, not from Figma layout units
+                    imgWidth = img.naturalWidth || img.width;
+                    imgHeight = img.naturalHeight || img.height;
                     isEditing = true;
                     emptyState.style.display = "none";
                     loadingOverlay.style.display = "none";

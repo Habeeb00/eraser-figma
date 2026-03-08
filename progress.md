@@ -67,6 +67,6 @@
 - [ ] Feather simulation (blur on mask)
 - [ ] Mask editing mode (reopen and continue editing existing mask)
 - [ ] Vector simplification (reduce anchor points)
-- [ ] Marketplace optimization
+- [x] Marketplace optimization (Created plugin logo.svg)
 - [ ] Magic wand color threshold selection
 - [ ] Batch processing

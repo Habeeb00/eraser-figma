@@ -65,6 +65,10 @@ npm run build         # Compile TypeScript
 npm run watch         # Watch mode for development
 ```
 
+## Publishing Assets
+
+- **Logo**: Use `logo.svg` directly for the plugin icon in Figma community. It is pre-styled with the Figma blue accent and dark-themed iOS/macOS aesthetic border glow. You can rasterize this in Figma as a 128x128 PNG if needed for the community portal.
+
 ## Technical Architecture
 
 1. **Selection Detection** — Validates any node with an IMAGE fill
