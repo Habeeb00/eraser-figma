@@ -601,17 +601,9 @@
                 </svg>
                 Erase
             </button>
-            <button class="tool-btn active" id="btnEraseMode" style="display:none"></button>
-            <button class="tool-btn" id="btnRestoreMode" title="Restore Mode (R)">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                    stroke-linejoin="round">
-                    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-                    <path d="M3 3v5h5" />
-                </svg>
-                Restore
-            </button>
 
             <div class="toolbar-sep"></div>
+
 
             <div class="undo-redo-group">
                 <button class="icon-btn" id="btnUndo" title="Undo (Ctrl+Z)" disabled>
@@ -651,14 +643,10 @@
 
         <!-- Action Buttons -->
         <div class="actions-row" id="actionsSection" style="display:none">
-            <button class="btn btn-secondary" id="btnCancel">Cancel</button>
             <button class="btn btn-secondary" id="btnClear">Clear All</button>
-            <button class="btn btn-primary" id="btnApply" disabled> Erase</button>
+            <button class="btn btn-primary" id="btnApply" disabled>Erase</button>
         </div>
 
-        <div class="actions-row" id="restoreSection" style="display:none">
-            <button class="btn btn-danger" id="btnRestore2">🔄 Restore Original Image</button>
-        </div>
 
         <div class="status-bar" id="statusBar">Select an image to begin</div>
     </div>
@@ -698,13 +686,10 @@
             const btnBrush = document.getElementById("btnBrush");
             const btnLasso = document.getElementById("btnLasso");
             const btnErase = document.getElementById("btnErase");
-            const btnRestoreMode = document.getElementById("btnRestoreMode");
             const btnUndo = document.getElementById("btnUndo");
             const btnRedo = document.getElementById("btnRedo");
             const btnApply = document.getElementById("btnApply");
-            const btnCancel = document.getElementById("btnCancel");
             const btnClear = document.getElementById("btnClear");
-            const btnRestore2 = document.getElementById("btnRestore2");
             const btnZoomIn = document.getElementById("btnZoomIn");
             const btnZoomOut = document.getElementById("btnZoomOut");
             const btnZoomReset = document.getElementById("btnZoomReset");
@@ -764,7 +749,6 @@
                 toolbarSection.style.display = d;
                 slidersSection.style.display = d;
                 actionsSection.style.display = d;
-                restoreSection.style.display = "none";
                 if (show) {
                     zoomBadge.style.display = "";
                     zoomControls.style.display = "flex";
@@ -1156,7 +1140,7 @@
                 btnBrush.classList.add("active");
                 btnLasso.classList.remove("active-lasso");
                 brushCanvas.style.cursor = "none";
-                setStatus(mode === "erase" ? "Brush erase — paint to remove" : "Brush restore — paint to bring back");
+                setStatus("Brush — paint to erase");
             });
 
             btnLasso.addEventListener("click", () => {
@@ -1165,21 +1149,12 @@
                 btnBrush.classList.remove("active");
                 cursorRing.style.display = "none";
                 brushCanvas.style.cursor = "crosshair";
-                setStatus(mode === "erase" ? "Lasso erase — draw selection to remove" : "Lasso restore — draw selection to bring back");
+                setStatus("Lasso — draw a selection to erase");
             });
 
             btnErase.addEventListener("click", () => {
-                mode = "erase";
                 btnErase.classList.add("active");
-                btnRestoreMode.classList.remove("active");
-                setStatus(tool === "brush" ? "Brush erase — paint to remove" : "Lasso erase — draw selection to remove");
-            });
-
-            btnRestoreMode.addEventListener("click", () => {
-                mode = "restore";
-                btnRestoreMode.classList.add("active");
-                btnErase.classList.remove("active");
-                setStatus(tool === "brush" ? "Brush restore — paint to bring back" : "Lasso restore — draw selection to bring back");
+                setStatus(tool === "brush" ? "Brush — paint to erase" : "Lasso — draw a selection to erase");
             });
 
             btnUndo.addEventListener("click", undo);
@@ -1218,7 +1193,6 @@
                 if (e.key === "b" || e.key === "B") btnBrush.click();
                 if (e.key === "l" || e.key === "L") btnLasso.click();
                 if (e.key === "e" || e.key === "E") btnErase.click();
-                if (e.key === "r" || e.key === "R") btnRestoreMode.click();
                 if (e.key === "[") { brushSize = Math.max(2, brushSize - 5); brushSizeSlider.value = brushSize; sizeValue.textContent = brushSize; }
                 if (e.key === "]") { brushSize = Math.min(100, brushSize + 5); brushSizeSlider.value = brushSize; sizeValue.textContent = brushSize; }
                 if (e.key === "0") fitToView();
@@ -1247,13 +1221,6 @@
             brushHardSlider.addEventListener("input", (e) => {
                 brushHardness = parseInt(e.target.value, 10);
                 hardValue.textContent = brushHardness + "%";
-            });
-
-            // ─── Action Buttons ───────────────────────────────
-            btnCancel.addEventListener("click", () => {
-                isEditing = false;
-                parent.postMessage({ pluginMessage: { type: "editing-stopped" } }, "*");
-                parent.postMessage({ pluginMessage: { type: "cancel" } }, "*");
             });
 
             btnClear.addEventListener("click", () => {
@@ -1318,9 +1285,6 @@
                 setStatus("Applying mask…");
             });
 
-            btnRestore2.addEventListener("click", () => {
-                parent.postMessage({ pluginMessage: { type: "restore-original" } }, "*");
-            });
 
             // ─── Messages from Backend ────────────────────────
             window.onmessage = (event) => {
@@ -1353,10 +1317,9 @@
 
                     case "already-processed":
                         showEditorUI(false);
-                        restoreSection.style.display = "flex";
                         emptyState.style.display = "flex";
                         emptyState.querySelector(".empty-state-title").textContent = "Already Processed";
-                        emptyState.querySelector(".empty-state-desc").textContent = "Background already removed. Click Restore to undo.";
+                        emptyState.querySelector(".empty-state-desc").textContent = "Background already removed. Select another element.";
                         loadingOverlay.style.display = "none";
                         hideCanvases();
                         break;
@@ -1399,7 +1362,7 @@
 
                     case "error":
                         showToast("❌ " + msg.message, "error");
-                        btnApply.textContent = "✨ Apply Mask";
+                        btnApply.textContent = "Erase";
                         btnApply.disabled = false;
                         setStatus("Error: " + msg.message);
                         break;

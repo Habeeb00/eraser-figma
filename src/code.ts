@@ -2,7 +2,7 @@
 // Approach: composite mask onto image pixels → replace fill with transparent PNG
 // Non-destructive: original imageHash stored in plugin data for restoration
 
-figma.showUI(__html__, { width: 520, height: 620, themeColors: true });
+figma.showUI(__html__, { width: 520, height: 650, themeColors: true });
 
 // ─── State ─────────────────────────────────────────────────
 
