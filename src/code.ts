@@ -94,7 +94,6 @@ async function handleSelection() {
             // NOT from node.width/node.height (which are layout units, not export pixels)
         });
     } catch (err: any) {
-        console.error("Export error:", err);
         figma.ui.postMessage({ type: "error", message: err.message || "Failed to export image" });
     }
 }
@@ -178,7 +177,6 @@ async function applyMask(base64ImageData: string, nodeId: string) {
         figma.notify("✅ Erased!");
 
     } catch (err: any) {
-        console.error("Apply mask error:", err);
         figma.ui.postMessage({ type: "error", message: err.message || "Failed to apply mask" });
     }
 }

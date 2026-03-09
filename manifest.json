@@ -1,6 +1,6 @@
 {
     "name": "Eraser",
-    "id": "eraser",
+    "id": "eraser-bg-remover",
     "api": "1.0.0",
     "main": "dist/code.js",
     "ui": "src/ui.html",
@@ -11,5 +11,6 @@
         "allowedDomains": [
             "none"
         ]
-    }
+    },
+    "documentAccess": "protected"
 }

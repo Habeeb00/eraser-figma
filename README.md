@@ -1,4 +1,4 @@
-# 🖌️ Brush Background Remover — Figma Plugin
+# 🖌️ Eraser — Figma Background Remover
 
 A fast, manual, brush-based background remover that works **fully inside Figma** using native vector masking.
 
@@ -14,6 +14,7 @@ A fast, manual, brush-based background remover that works **fully inside Figma**
 - **Live Preview** — Checkerboard transparency grid shows result in real-time
 - **Non-destructive** — Creates a Figma mask group, original image preserved
 - **Restore** — Select the mask group and restore the original with one click
+- **Retro Interface** — Classic MS Paint / Windows 95 design aesthetic
 
 ## How to Load
 
